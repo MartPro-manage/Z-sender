@@ -31,5 +31,10 @@ service cloud.firestore {
     match /users/{userId}/savedAttachments/{attachmentId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
+
+    // User Sender / SMTP Settings
+    match /users/{userId}/settings/{docId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
   }
 }

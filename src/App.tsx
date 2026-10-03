@@ -21,6 +21,7 @@ import {
   ScheduledEmailData,
   EmailLogData,
   SavedAttachmentData,
+  SenderSettingsData,
   getContacts,
   saveContact,
   deleteContact,
@@ -34,6 +35,8 @@ import {
   saveAttachmentToBank,
   deleteSavedAttachment,
   deleteAllUserData,
+  getUserSenderSettings,
+  saveUserSenderSettings,
 } from './lib/firestoreService';
 import { Navbar, ActiveTab } from './components/Navbar';
 import { Composer } from './components/Composer';
@@ -42,6 +45,7 @@ import { ScheduledQueue } from './components/ScheduledQueue';
 import { EmailLogs } from './components/EmailLogs';
 import { AttachmentBank } from './components/AttachmentBank';
 import { AuthLanding } from './components/AuthLanding';
+import { SenderConfigModal } from './components/SenderConfigModal';
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 export default function App() {
@@ -50,6 +54,8 @@ export default function App() {
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isGmailAuthorized, setIsGmailAuthorized] = useState(false);
+  const [senderSettings, setSenderSettings] = useState<SenderSettingsData | null>(null);
+  const [isSenderModalOpen, setIsSenderModalOpen] = useState(false);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('composer');
@@ -93,6 +99,7 @@ export default function App() {
       () => {
         setUser(null);
         setIsGmailAuthorized(false);
+        setSenderSettings(null);
         setIsAuthLoading(false);
       }
     );
@@ -102,16 +109,18 @@ export default function App() {
   // Fetch Firestore user data when authenticated
   const loadUserData = async (uid: string) => {
     try {
-      const [cList, sList, lList, aList] = await Promise.all([
+      const [cList, sList, lList, aList, sSettings] = await Promise.all([
         getContacts(uid).catch(() => []),
         getScheduledEmails(uid).catch(() => []),
         getEmailLogs(uid).catch(() => []),
         getSavedAttachments(uid).catch(() => []),
+        getUserSenderSettings(uid).catch(() => null),
       ]);
       setContacts(cList);
       setScheduledEmails(sList);
       setEmailLogs(lList);
       setSavedAttachments(aList);
+      setSenderSettings(sSettings);
     } catch (err) {
       console.error('Error loading Firestore data:', err);
     }
@@ -125,11 +134,13 @@ export default function App() {
 
   // Background Worker: Checks pending scheduled emails every 15s and sends due items
   useEffect(() => {
-    if (!user) return;
+    if (!user || !user.email) return;
 
     const interval = setInterval(async () => {
       const token = await getAccessToken();
-      if (!token || !user.email) return;
+      const hasAppPassword = Boolean(senderSettings?.appPassword);
+
+      if (!token && !hasAppPassword) return;
 
       const now = new Date().getTime();
       const pending = scheduledEmails.filter((e) => e.status === 'pending');
@@ -137,22 +148,46 @@ export default function App() {
       for (const item of pending) {
         if (new Date(item.scheduledAt).getTime() <= now) {
           try {
-            const rawMsg = buildRawRfc822Message({
-              fromEmail: user.email,
-              toEmail: item.toEmail,
-              subject: item.subject,
-              bodyHtml: item.body,
-              attachments: item.attachmentsData
-                ? item.attachmentsData.map((a) => ({
-                    filename: a.filename,
-                    mimeType: a.mimeType,
-                    size: a.size,
-                    base64Data: a.base64Data,
-                  }))
-                : [],
-            });
+            const formattedAtts = item.attachmentsData
+              ? item.attachmentsData.map((a) => ({
+                  filename: a.filename,
+                  mimeType: a.mimeType,
+                  size: a.size,
+                  base64Data: a.base64Data,
+                }))
+              : [];
 
-            await sendGmailMessage(token, rawMsg);
+            if (hasAppPassword && senderSettings?.appPassword) {
+              const res = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  senderEmail: user.email,
+                  appPassword: senderSettings.appPassword,
+                  smtpHost: senderSettings.smtpHost,
+                  smtpPort: senderSettings.smtpPort,
+                  smtpSecure: senderSettings.smtpSecure,
+                  toEmail: item.toEmail,
+                  subject: item.subject,
+                  bodyHtml: item.body,
+                  attachments: formattedAtts,
+                }),
+              });
+              if (!res.ok) {
+                const eJson = await res.json().catch(() => null);
+                throw new Error(eJson?.error || 'Failed to dispatch scheduled email');
+              }
+            } else if (token) {
+              const rawMsg = buildRawRfc822Message({
+                fromEmail: user.email || '',
+                toEmail: item.toEmail,
+                subject: item.subject,
+                bodyHtml: item.body,
+                attachments: formattedAtts,
+              });
+              await sendGmailMessage(token, rawMsg);
+            }
+
             await updateScheduledEmailStatus(user.uid, item.id, 'sent');
             await logEmailSent(user.uid, {
               toEmail: item.toEmail,
@@ -173,7 +208,7 @@ export default function App() {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [user, scheduledEmails]);
+  }, [user, scheduledEmails, senderSettings]);
 
   // Helper to map Firebase Auth error codes to user-friendly messages
   const formatAuthError = (err: any): string => {
@@ -328,6 +363,16 @@ export default function App() {
     }
   };
 
+  const handleSaveSenderSettings = async (settings: SenderSettingsData) => {
+    if (!user) return;
+    await saveUserSenderSettings(user.uid, settings);
+    setSenderSettings(settings);
+    setGlobalBanner({
+      type: 'success',
+      message: 'Email sender credentials verified and saved! Real dispatch is ready.',
+    });
+  };
+
   // Trigger Direct Email Sending
   const handleInitiateSendNow = async (data: {
     toEmail: string;
@@ -341,53 +386,104 @@ export default function App() {
     setIsSendingInProgress(true);
     setGlobalBanner({
       type: 'success',
-      message: 'Processing real email delivery via Gmail API...',
+      message: 'Processing real email delivery...',
     });
 
     try {
-      let token = await getAccessToken();
-      if (!token) {
-        // Automatically prompt Google OAuth authorization popup if not yet connected
-        setGlobalBanner({
-          type: 'success',
-          message: 'Authorizing Gmail access for real inbox delivery...',
-        });
-        token = await requestGmailSenderAuthorization();
-        setIsGmailAuthorized(true);
-      }
-
-      if (!token) {
-        throw new Error('Gmail authorization is required to send emails to real inboxes. Please grant permission.');
-      }
-
       const { toEmail, subject, bodyHtml, attachments, sendSelfCopy } = data;
+      const hasAppPassword = Boolean(senderSettings?.appPassword);
 
-      // 1. Build RFC 822 MIME message with Base64 attachments
-      const rawMsg = buildRawRfc822Message({
-        fromEmail: user.email,
-        toEmail,
-        subject,
-        bodyHtml,
-        attachments,
-      });
+      if (hasAppPassword && senderSettings?.appPassword) {
+        // Direct dispatch using App Password & SMTP backend (100% bypasses Google OAuth verification restrictions)
+        const res = await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderEmail: user.email,
+            appPassword: senderSettings.appPassword,
+            smtpHost: senderSettings.smtpHost,
+            smtpPort: senderSettings.smtpPort,
+            smtpSecure: senderSettings.smtpSecure,
+            toEmail,
+            subject,
+            bodyHtml,
+            attachments,
+          }),
+        });
 
-      // 2. Send via official Gmail REST API
-      const result = await sendGmailMessage(token, rawMsg);
-      console.log('Real email sent via Gmail API:', result);
+        const sendRes = await res.json();
+        if (!res.ok) {
+          throw new Error(sendRes.error || 'Failed to dispatch email via SMTP.');
+        }
 
-      // 3. If sendSelfCopy is checked, also send copy to user's logged in address
-      if (sendSelfCopy && user.email !== toEmail) {
-        const selfMsg = buildRawRfc822Message({
+        // If sendSelfCopy is checked, also deliver copy to sender's own address
+        if (sendSelfCopy && user.email !== toEmail) {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              senderEmail: user.email,
+              appPassword: senderSettings.appPassword,
+              smtpHost: senderSettings.smtpHost,
+              smtpPort: senderSettings.smtpPort,
+              smtpSecure: senderSettings.smtpSecure,
+              toEmail: user.email,
+              subject: `[Copy] ${subject}`,
+              bodyHtml,
+              attachments,
+            }),
+          }).catch((e) => console.warn('Self copy note:', e));
+        }
+      } else {
+        // Fallback to OAuth token if user prefers OAuth
+        let token = await getAccessToken();
+        if (!token) {
+          try {
+            setGlobalBanner({
+              type: 'success',
+              message: 'Authorizing Gmail access for real inbox delivery...',
+            });
+            token = await requestGmailSenderAuthorization();
+            setIsGmailAuthorized(true);
+          } catch (oauthErr: any) {
+            console.warn('OAuth authorization failed, opening App Password setup:', oauthErr);
+            setIsSenderModalOpen(true);
+            throw new Error(
+              'Google OAuth blocked this app because verification is pending. Please enter your 16-character Gmail App Password to send real emails immediately.'
+            );
+          }
+        }
+
+        if (!token) {
+          setIsSenderModalOpen(true);
+          throw new Error('Please set up your Gmail App Password to enable real email sending.');
+        }
+
+        // Build RFC 822 MIME message with Base64 attachments
+        const rawMsg = buildRawRfc822Message({
           fromEmail: user.email,
-          toEmail: user.email,
-          subject: `[Copy] ${subject}`,
+          toEmail,
+          subject,
           bodyHtml,
           attachments,
         });
-        await sendGmailMessage(token, selfMsg).catch((e) => console.warn('Self copy note:', e));
+
+        // Send via official Gmail REST API
+        await sendGmailMessage(token, rawMsg);
+
+        if (sendSelfCopy && user.email !== toEmail) {
+          const selfMsg = buildRawRfc822Message({
+            fromEmail: user.email,
+            toEmail: user.email,
+            subject: `[Copy] ${subject}`,
+            bodyHtml,
+            attachments,
+          });
+          await sendGmailMessage(token, selfMsg).catch((e) => console.warn('Self copy note:', e));
+        }
       }
 
-      // 4. Log sent transfer in Firestore
+      // Log sent transfer in Firestore
       await logEmailSent(user.uid, {
         toEmail,
         subject,
@@ -411,7 +507,8 @@ export default function App() {
         err?.code === 'auth/cancelled-popup-request' ||
         err?.message?.includes('popup-closed-by-user')
       ) {
-        errMsg = 'Google authorization popup was closed. Please click "Connect Gmail" to allow sending.';
+        errMsg = 'Google authorization popup was closed. Use a 16-letter Gmail App Password instead.';
+        setIsSenderModalOpen(true);
       }
       setGlobalBanner({
         type: 'error',
@@ -672,7 +769,9 @@ export default function App() {
               contacts={contacts}
               savedAttachmentsBank={savedAttachments}
               isGmailAuthorized={isGmailAuthorized}
+              senderSettings={senderSettings}
               onConnectGmail={handleConnectGmail}
+              onOpenSenderConfig={() => setIsSenderModalOpen(true)}
               onSendNow={handleInitiateSendNow}
               onScheduleSend={handleScheduleSend}
               onSaveDraft={handleSaveDraft}
@@ -722,6 +821,17 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Sender Configuration Modal for App Password / Direct SMTP */}
+      {user && (
+        <SenderConfigModal
+          isOpen={isSenderModalOpen}
+          onClose={() => setIsSenderModalOpen(false)}
+          senderEmail={user.email || ''}
+          currentSettings={senderSettings}
+          onSaveSettings={handleSaveSenderSettings}
+        />
+      )}
 
       {/* Footer */}
       <footer className="border-t border-slate-900 py-4 text-center text-[11px] text-slate-600">

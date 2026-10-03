@@ -17,17 +17,20 @@ import {
   Archive,
   Save,
   CheckCircle2,
+  Zap,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { FileAttachment, fileToAttachment } from '../lib/gmailService';
-import { ContactData, SavedAttachmentData } from '../lib/firestoreService';
+import { ContactData, SavedAttachmentData, SenderSettingsData } from '../lib/firestoreService';
 
 interface ComposerProps {
   user: User;
   contacts: ContactData[];
   savedAttachmentsBank: SavedAttachmentData[];
   isGmailAuthorized?: boolean;
+  senderSettings?: SenderSettingsData | null;
   onConnectGmail?: () => Promise<void>;
+  onOpenSenderConfig?: () => void;
   onSendNow: (emailData: {
     toEmail: string;
     subject: string;
@@ -83,7 +86,9 @@ export const Composer: React.FC<ComposerProps> = ({
   contacts,
   savedAttachmentsBank,
   isGmailAuthorized,
+  senderSettings,
   onConnectGmail,
+  onOpenSenderConfig,
   onSendNow,
   onScheduleSend,
   onSaveDraft,
@@ -298,20 +303,30 @@ export const Composer: React.FC<ComposerProps> = ({
               <p className="text-xs text-slate-400">
                 Sender: <span className="text-indigo-300 font-mono font-semibold">{user.email}</span>
               </p>
-              {isGmailAuthorized ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 className="w-3 h-3" />
-                  Gmail Delivery Active
-                </span>
-              ) : onConnectGmail ? (
+              {senderSettings?.appPassword ? (
                 <button
                   type="button"
-                  onClick={onConnectGmail}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full transition cursor-pointer"
-                  title="Connect your Gmail account to send real emails to inboxes"
+                  onClick={onOpenSenderConfig}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-0.5 rounded-full transition cursor-pointer"
+                  title="Direct SMTP sending is active with your App Password"
                 >
-                  <Sparkles className="w-2.5 h-2.5 text-amber-400" />
-                  <span>Connect Gmail (Real Inbox Send)</span>
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>Direct Delivery Active (App Password)</span>
+                </button>
+              ) : isGmailAuthorized ? (
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                  <CheckCircle2 className="w-3 h-3" />
+                  OAuth Active
+                </span>
+              ) : onOpenSenderConfig ? (
+                <button
+                  type="button"
+                  onClick={onOpenSenderConfig}
+                  className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full transition cursor-pointer"
+                  title="Set up your 16-character Gmail App Password to bypass Google OAuth verification limits"
+                >
+                  <Zap className="w-2.5 h-2.5 text-amber-400" />
+                  <span>Configure App Password (Bypass OAuth Limits)</span>
                 </button>
               ) : null}
             </div>

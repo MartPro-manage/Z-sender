@@ -260,9 +260,42 @@ export async function deleteSavedAttachment(userId: string, attachmentId: string
   }
 }
 
+export interface SenderSettingsData {
+  appPassword?: string;
+  smtpHost?: string;
+  smtpPort?: number;
+  smtpSecure?: boolean;
+  updatedAt?: string;
+}
+
+export async function getUserSenderSettings(userId: string): Promise<SenderSettingsData | null> {
+  const path = `users/${userId}/settings/sender`;
+  try {
+    const snap = await getDoc(doc(db, 'users', userId, 'settings', 'sender'));
+    if (snap.exists()) {
+      return snap.data() as SenderSettingsData;
+    }
+    return null;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, path);
+  }
+}
+
+export async function saveUserSenderSettings(userId: string, settings: SenderSettingsData): Promise<void> {
+  const path = `users/${userId}/settings/sender`;
+  try {
+    await setDoc(doc(db, 'users', userId, 'settings', 'sender'), {
+      ...settings,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
 // DELETE ALL DATA FOR A USER ACCOUNT
 export async function deleteAllUserData(userId: string): Promise<void> {
-  const collections = ['contacts', 'scheduledEmails', 'emailLogs', 'savedAttachments'];
+  const collections = ['contacts', 'scheduledEmails', 'emailLogs', 'savedAttachments', 'settings'];
   for (const col of collections) {
     try {
       const colRef = collection(db, 'users', userId, col);
