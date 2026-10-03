@@ -259,3 +259,19 @@ export async function deleteSavedAttachment(userId: string, attachmentId: string
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
+
+// DELETE ALL DATA FOR A USER ACCOUNT
+export async function deleteAllUserData(userId: string): Promise<void> {
+  const collections = ['contacts', 'scheduledEmails', 'emailLogs', 'savedAttachments'];
+  for (const col of collections) {
+    try {
+      const colRef = collection(db, 'users', userId, col);
+      const snap = await getDocs(colRef);
+      for (const d of snap.docs) {
+        await deleteDoc(d.ref);
+      }
+    } catch (e) {
+      console.warn(`Error deleting collection ${col} for user ${userId}:`, e);
+    }
+  }
+}
