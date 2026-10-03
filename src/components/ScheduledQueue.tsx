@@ -76,9 +76,9 @@ export const ScheduledQueue: React.FC<ScheduledQueueProps> = ({
           </div>
         ) : (
           <div className="space-y-3">
-            {pendingEmails.map((item) => (
+            {pendingEmails.map((item, index) => (
               <div
-                key={item.id}
+                key={`${item.id || 'pending'}-${index}`}
                 className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-5 rounded-2xl shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition"
               >
                 <div className="space-y-1.5 flex-1">
@@ -144,9 +144,9 @@ export const ScheduledQueue: React.FC<ScheduledQueueProps> = ({
           </h3>
 
           <div className="space-y-2">
-            {pastEmails.map((item) => (
+            {pastEmails.map((item, index) => (
               <div
-                key={item.id}
+                key={`${item.id || 'past'}-${index}`}
                 className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs"
               >
                 <div className="flex items-center gap-3 truncate">

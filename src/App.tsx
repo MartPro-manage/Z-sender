@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { User } from 'firebase/auth';
+import { db } from './lib/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { initAuth, googleSignIn, logout, getAccessToken } from './lib/auth';
 import {
   FileAttachment,
@@ -39,6 +41,20 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('composer');
@@ -127,18 +143,87 @@ export default function App() {
     }
   }, [user]);
 
-  // Background Worker: Checks pending scheduled emails every 15s and sends due items
+  const scheduledEmailsRef = useRef(scheduledEmails);
+  useEffect(() => {
+    scheduledEmailsRef.current = scheduledEmails;
+  }, [scheduledEmails]);
+
+  // Real-Time Auto-Sender & Scheduler Worker
   useEffect(() => {
     if (!user) return;
 
+    // 1. Real-time Subscription to automatically dispatch incoming emails instantly
+    const q = query(
+      collection(db, 'users', user.uid, 'scheduledEmails'),
+      where('status', '==', 'pending')
+    );
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const token = await getAccessToken();
+      if (!token || !user.email) return;
+
+      const now = new Date().getTime();
+
+      for (const docSnap of snapshot.docs) {
+        const item = {
+          ...docSnap.data(),
+          id: docSnap.id,
+        } as ScheduledEmailData;
+
+        const scheduledTime = new Date(item.scheduledAt || now).getTime();
+        
+        // If scheduled for now, immediate send, or past time, dispatch instantly without manual click!
+        if (scheduledTime <= now + 10000) { // allow a 10s buffer for slight clock differences
+          try {
+            console.log(`[Auto Dispatch] Instantly sending queued email ${item.id} to ${item.toEmail}...`);
+            const rawMsg = buildRawRfc822Message({
+              fromEmail: user.email,
+              toEmail: item.toEmail,
+              subject: item.subject,
+              bodyHtml: item.body,
+              attachments: item.attachmentsData
+                ? item.attachmentsData.map((a) => ({
+                    filename: a.filename,
+                    mimeType: a.mimeType,
+                    size: a.size,
+                    base64Data: a.base64Data,
+                  }))
+                : [],
+            });
+
+            await sendGmailMessage(token, rawMsg);
+            await updateScheduledEmailStatus(user.uid, item.id, 'sent');
+            await logEmailSent(user.uid, {
+              toEmail: item.toEmail,
+              subject: item.subject,
+              snippet: item.body.replace(/<[^>]+>/g, '').substring(0, 100),
+              attachmentCount: item.attachmentCount || 0,
+              sentAt: new Date().toISOString(),
+              status: 'success',
+            });
+
+            loadUserData(user.uid);
+          } catch (err: any) {
+            console.error('[Auto Dispatch Error] Failed to send:', item.id, err);
+            await updateScheduledEmailStatus(user.uid, item.id, 'failed', err.message);
+            loadUserData(user.uid);
+          }
+        }
+      }
+    });
+
+    // 2. Periodic Checker: Keeps scanning for future-scheduled items that become due
     const interval = setInterval(async () => {
       const token = await getAccessToken();
       if (!token || !user.email) return;
 
       const now = new Date().getTime();
-      const pending = scheduledEmails.filter((e) => e.status === 'pending');
+      const pending = scheduledEmailsRef.current.filter((e) => e.status === 'pending');
 
       for (const item of pending) {
+        if (!item.id) continue;
+
+        // If a future-scheduled item becomes due, dispatch it
         if (new Date(item.scheduledAt).getTime() <= now) {
           try {
             const rawMsg = buildRawRfc822Message({
@@ -176,8 +261,11 @@ export default function App() {
       }
     }, 15000);
 
-    return () => clearInterval(interval);
-  }, [user, scheduledEmails]);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
+  }, [user]);
 
   // Auth Actions
   const handleGoogleSignIn = async () => {
@@ -507,6 +595,13 @@ export default function App() {
           scheduledCount={scheduledEmails.filter((e) => e.status === 'pending').length}
           contactCount={contacts.length}
         />
+
+        {!isOnline && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs text-amber-400 font-semibold flex items-center justify-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
+            <span>Operating in offline mode. Your actions will automatically synchronize to your database once your connection is restored.</span>
+          </div>
+        )}
 
         {/* Global Banner Notification */}
         {globalBanner && (

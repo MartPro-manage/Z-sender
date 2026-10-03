@@ -68,7 +68,7 @@ export async function getContacts(userId: string): Promise<ContactData[]> {
   try {
     const q = query(collection(db, path), orderBy('name', 'asc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => docSnap.data() as ContactData);
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as ContactData));
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
   }
@@ -125,7 +125,7 @@ export async function getScheduledEmails(userId: string): Promise<ScheduledEmail
   try {
     const q = query(collection(db, path), orderBy('scheduledAt', 'asc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => docSnap.data() as ScheduledEmailData);
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as ScheduledEmailData));
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
   }
@@ -189,7 +189,7 @@ export async function getEmailLogs(userId: string): Promise<EmailLogData[]> {
   try {
     const q = query(collection(db, path), orderBy('sentAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => docSnap.data() as EmailLogData);
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as EmailLogData));
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
   }
@@ -222,7 +222,7 @@ export async function getSavedAttachments(userId: string): Promise<SavedAttachme
   try {
     const q = query(collection(db, path), orderBy('createdAt', 'desc'));
     const snapshot = await getDocs(q);
-    return snapshot.docs.map((docSnap) => docSnap.data() as SavedAttachmentData);
+    return snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as SavedAttachmentData));
   } catch (error) {
     handleFirestoreError(error, OperationType.GET, path);
   }
