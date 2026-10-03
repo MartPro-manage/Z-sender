@@ -194,6 +194,10 @@ export default function App() {
       ) {
         // Quietly handle user cancelling/closing the login popup
         setAuthError('Sign-in window was closed. Click "Continue with Google Account" to try again.');
+      } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        setAuthError(
+          'Unauthorized Domain: To log in from your Vercel deployment, you must add your Vercel URL (e.g., yoursite.vercel.app) to the "Authorized Domains" list in your Firebase Console (Authentication -> Settings -> Authorized Domains).'
+        );
       } else {
         console.error('Sign-In Error:', err);
         setAuthError(err?.message || 'Failed to authenticate with Google Account.');
