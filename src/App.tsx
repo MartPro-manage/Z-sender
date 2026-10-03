@@ -1,7 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import { db } from './lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { initAuth, googleSignIn, logout, getAccessToken } from './lib/auth';
 import {
   FileAttachment,
@@ -33,7 +31,6 @@ import { AddressBook } from './components/AddressBook';
 import { ScheduledQueue } from './components/ScheduledQueue';
 import { EmailLogs } from './components/EmailLogs';
 import { AttachmentBank } from './components/AttachmentBank';
-import { ConfirmModal } from './components/ConfirmModal';
 import { AuthLanding } from './components/AuthLanding';
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
 
@@ -41,20 +38,6 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('composer');
@@ -81,25 +64,6 @@ export default function App() {
     if (subParam) setComposerSubject(subParam);
     if (bodyParam) setComposerBody(bodyParam);
   }, []);
-
-  // Confirmation Modal State (Mandatory Workspace Skill Requirement)
-  const [confirmModalData, setConfirmModalData] = useState<{
-    isOpen: boolean;
-    toEmail: string;
-    subject: string;
-    bodyHtml: string;
-    attachments: FileAttachment[];
-    sendSelfCopy: boolean;
-    isScheduled?: boolean;
-    scheduledTime?: string;
-  }>({
-    isOpen: false,
-    toEmail: '',
-    subject: '',
-    bodyHtml: '',
-    attachments: [],
-    sendSelfCopy: false,
-  });
 
   const [isSendingInProgress, setIsSendingInProgress] = useState(false);
   const [globalBanner, setGlobalBanner] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -143,87 +107,18 @@ export default function App() {
     }
   }, [user]);
 
-  const scheduledEmailsRef = useRef(scheduledEmails);
-  useEffect(() => {
-    scheduledEmailsRef.current = scheduledEmails;
-  }, [scheduledEmails]);
-
-  // Real-Time Auto-Sender & Scheduler Worker
+  // Background Worker: Checks pending scheduled emails every 15s and sends due items
   useEffect(() => {
     if (!user) return;
 
-    // 1. Real-time Subscription to automatically dispatch incoming emails instantly
-    const q = query(
-      collection(db, 'users', user.uid, 'scheduledEmails'),
-      where('status', '==', 'pending')
-    );
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      const token = await getAccessToken();
-      if (!token || !user.email) return;
-
-      const now = new Date().getTime();
-
-      for (const docSnap of snapshot.docs) {
-        const item = {
-          ...docSnap.data(),
-          id: docSnap.id,
-        } as ScheduledEmailData;
-
-        const scheduledTime = new Date(item.scheduledAt || now).getTime();
-        
-        // If scheduled for now, immediate send, or past time, dispatch instantly without manual click!
-        if (scheduledTime <= now + 10000) { // allow a 10s buffer for slight clock differences
-          try {
-            console.log(`[Auto Dispatch] Instantly sending queued email ${item.id} to ${item.toEmail}...`);
-            const rawMsg = buildRawRfc822Message({
-              fromEmail: user.email,
-              toEmail: item.toEmail,
-              subject: item.subject,
-              bodyHtml: item.body,
-              attachments: item.attachmentsData
-                ? item.attachmentsData.map((a) => ({
-                    filename: a.filename,
-                    mimeType: a.mimeType,
-                    size: a.size,
-                    base64Data: a.base64Data,
-                  }))
-                : [],
-            });
-
-            await sendGmailMessage(token, rawMsg);
-            await updateScheduledEmailStatus(user.uid, item.id, 'sent');
-            await logEmailSent(user.uid, {
-              toEmail: item.toEmail,
-              subject: item.subject,
-              snippet: item.body.replace(/<[^>]+>/g, '').substring(0, 100),
-              attachmentCount: item.attachmentCount || 0,
-              sentAt: new Date().toISOString(),
-              status: 'success',
-            });
-
-            loadUserData(user.uid);
-          } catch (err: any) {
-            console.error('[Auto Dispatch Error] Failed to send:', item.id, err);
-            await updateScheduledEmailStatus(user.uid, item.id, 'failed', err.message);
-            loadUserData(user.uid);
-          }
-        }
-      }
-    });
-
-    // 2. Periodic Checker: Keeps scanning for future-scheduled items that become due
     const interval = setInterval(async () => {
       const token = await getAccessToken();
       if (!token || !user.email) return;
 
       const now = new Date().getTime();
-      const pending = scheduledEmailsRef.current.filter((e) => e.status === 'pending');
+      const pending = scheduledEmails.filter((e) => e.status === 'pending');
 
       for (const item of pending) {
-        if (!item.id) continue;
-
-        // If a future-scheduled item becomes due, dispatch it
         if (new Date(item.scheduledAt).getTime() <= now) {
           try {
             const rawMsg = buildRawRfc822Message({
@@ -261,11 +156,8 @@ export default function App() {
       }
     }, 15000);
 
-    return () => {
-      unsubscribe();
-      clearInterval(interval);
-    };
-  }, [user]);
+    return () => clearInterval(interval);
+  }, [user, scheduledEmails]);
 
   // Auth Actions
   const handleGoogleSignIn = async () => {
@@ -300,7 +192,7 @@ export default function App() {
     setUser(null);
   };
 
-  // Trigger Confirmation Modal for Email Transfer
+  // Trigger Direct Gmail Sending instantly
   const handleInitiateSendNow = async (data: {
     toEmail: string;
     subject: string;
@@ -308,30 +200,26 @@ export default function App() {
     attachments: FileAttachment[];
     sendSelfCopy: boolean;
   }) => {
-    setConfirmModalData({
-      isOpen: true,
-      toEmail: data.toEmail,
-      subject: data.subject,
-      bodyHtml: data.bodyHtml,
-      attachments: data.attachments,
-      sendSelfCopy: data.sendSelfCopy,
-    });
-  };
-
-  // Confirm and Execute Gmail Sending
-  const handleExecuteSend = async () => {
     if (!user || !user.email) return;
 
     setIsSendingInProgress(true);
+    setGlobalBanner({
+      type: 'success',
+      message: 'Sending email via Gmail API...',
+    });
+
     try {
       let token = await getAccessToken();
       if (!token) {
         // Prompt re-auth if token expired
         const res = await googleSignIn();
-        token = res.accessToken;
+        token = res?.accessToken || null;
+      }
+      if (!token) {
+        throw new Error('Could not retrieve access token. Please sign in again.');
       }
 
-      const { toEmail, subject, bodyHtml, attachments, sendSelfCopy } = confirmModalData;
+      const { toEmail, subject, bodyHtml, attachments, sendSelfCopy } = data;
 
       // Build & Send raw RFC 822 email
       const rawMsg = buildRawRfc822Message({
@@ -371,7 +259,6 @@ export default function App() {
         message: `Email successfully sent via Gmail to ${toEmail} with ${attachments.length} attachment(s)!`,
       });
 
-      setConfirmModalData((prev) => ({ ...prev, isOpen: false }));
       loadUserData(user.uid);
     } catch (err: any) {
       console.error('Send Error:', err);
@@ -379,6 +266,7 @@ export default function App() {
         type: 'error',
         message: `Sending failed: ${err.message || 'Check your Gmail permissions.'}`,
       });
+      throw err;
     } finally {
       setIsSendingInProgress(false);
       setTimeout(() => setGlobalBanner(null), 5000);
@@ -596,13 +484,6 @@ export default function App() {
           contactCount={contacts.length}
         />
 
-        {!isOnline && (
-          <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs text-amber-400 font-semibold flex items-center justify-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-amber-500 animate-pulse" />
-            <span>Operating in offline mode. Your actions will automatically synchronize to your database once your connection is restored.</span>
-          </div>
-        )}
-
         {/* Global Banner Notification */}
         {globalBanner && (
           <div
@@ -682,19 +563,6 @@ export default function App() {
           )}
         </main>
       </div>
-
-      {/* Confirmation Modal */}
-      <ConfirmModal
-        isOpen={confirmModalData.isOpen}
-        onClose={() => setConfirmModalData((prev) => ({ ...prev, isOpen: false }))}
-        onConfirm={handleExecuteSend}
-        title="Confirm Gmail Transfer"
-        senderEmail={user.email || ''}
-        recipientEmail={confirmModalData.toEmail}
-        subject={confirmModalData.subject}
-        attachments={confirmModalData.attachments}
-        isSending={isSendingInProgress}
-      />
 
       {/* Footer */}
       <footer className="border-t border-slate-900 py-4 text-center text-[11px] text-slate-600">

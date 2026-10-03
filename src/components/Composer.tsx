@@ -108,6 +108,7 @@ export const Composer: React.FC<ComposerProps> = ({
 
   // Notifications
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
+  const [isSending, setIsSending] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -236,23 +237,36 @@ export const Composer: React.FC<ComposerProps> = ({
       .map((line) => line.trim() ? `<p>${line}</p>` : '<br/>')
       .join('');
 
-    if (sendMode === 'instant') {
-      await onSendNow({
-        toEmail,
-        subject: subject || 'No Subject',
-        bodyHtml: formattedBodyHtml,
-        attachments,
-        sendSelfCopy,
-      });
-    } else {
-      const scheduledAt = calculateScheduledISO();
-      await onScheduleSend({
-        toEmail,
-        subject: subject || 'No Subject',
-        bodyHtml: formattedBodyHtml,
-        scheduledAt,
-        attachments,
-      });
+    setIsSending(true);
+    try {
+      if (sendMode === 'instant') {
+        await onSendNow({
+          toEmail,
+          subject: subject || 'No Subject',
+          bodyHtml: formattedBodyHtml,
+          attachments,
+          sendSelfCopy,
+        });
+      } else {
+        const scheduledAt = calculateScheduledISO();
+        await onScheduleSend({
+          toEmail,
+          subject: subject || 'No Subject',
+          bodyHtml: formattedBodyHtml,
+          scheduledAt,
+          attachments,
+        });
+      }
+      
+      // Clear fields upon successful submit
+      setToEmail('');
+      setSubject('');
+      setBodyText('');
+      setAttachments([]);
+    } catch (error: any) {
+      setStatusMsg({ type: 'error', text: error.message || 'Operation failed.' });
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -610,11 +624,20 @@ export const Composer: React.FC<ComposerProps> = ({
 
             <button
               onClick={handleTriggerSend}
-              disabled={isProcessingFiles}
+              disabled={isProcessingFiles || isSending}
               className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-sm font-bold shadow-xl shadow-indigo-600/30 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
-              <Send className="w-4 h-4" />
-              <span>{sendMode === 'instant' ? 'Send Email via Gmail' : 'Confirm Scheduled Queue'}</span>
+              {isSending ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Sending...</span>
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span>{sendMode === 'instant' ? 'Send Email via Gmail' : 'Confirm Scheduled Queue'}</span>
+                </>
+              )}
             </button>
           </div>
         </div>
