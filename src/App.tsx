@@ -170,13 +170,26 @@ export default function App() {
       if (
         err?.code === 'auth/popup-closed-by-user' ||
         err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.includes('popup-closed-by-user')
+        err?.message?.includes('popup-closed-by-user') ||
+        err?.code === 'auth/popup-blocked' ||
+        err?.message?.includes('popup-blocked')
       ) {
-        // Quietly handle user cancelling/closing the login popup
-        setAuthError('Sign-in window was closed. Click "Continue with Google Account" to try again.');
+        // Handle user cancelling or browser blocking the sign-in popup
+        setAuthError(
+          'Sign-in window was closed or blocked: This can happen if you closed the window manually, or if your browser/adblocker blocked the popup. Please click "Continue with Google Account" to try again, allow popups for this site, or launch the app in a standalone window using the top-right "Open in new window" button.'
+        );
       } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
         setAuthError(
           'Unauthorized Domain: To log in from your Vercel deployment, you must add your Vercel URL (e.g., yoursite.vercel.app) to the "Authorized Domains" list in your Firebase Console (Authentication -> Settings -> Authorized Domains).'
+        );
+      } else if (
+        err?.code === 'auth/internal-error' ||
+        err?.message?.includes('auth/internal-error') ||
+        err?.code === 'auth/network-request-failed' ||
+        err?.message?.includes('network-request-failed')
+      ) {
+        setAuthError(
+          'Iframe Storage Blocked (auth/internal-error): This app is currently running inside a preview iframe. To sign in successfully, please click the "Open in new window" or "Launch App" icon at the top-right of the preview panel to run the app standalone, or enable third-party cookies in your browser settings.'
         );
       } else {
         console.error('Sign-In Error:', err);

@@ -53,9 +53,17 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({ onSignIn, isLoading, e
 
         {/* Error Alert */}
         {error && (
-          <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-300 text-sm max-w-md w-full text-left">
-            <p className="font-semibold mb-1">Authentication Notice</p>
-            <p className="text-xs text-rose-300/80">{error}</p>
+          <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-300 text-sm max-w-md w-full text-left space-y-3 shadow-lg">
+            <div>
+              <p className="font-semibold mb-1">Authentication Notice</p>
+              <p className="text-xs text-rose-300/80">{error}</p>
+            </div>
+            <button
+              onClick={() => window.open(window.location.href, '_blank')}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+            >
+              <span>Launch Standalone Tab (Recommended Fix)</span>
+            </button>
           </div>
         )}
 
