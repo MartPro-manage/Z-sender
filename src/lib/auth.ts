@@ -17,8 +17,9 @@ let cachedAccessToken: string | null = null;
 const googleProvider = new GoogleAuthProvider();
 googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
 googleProvider.addScope('https://www.googleapis.com/auth/gmail.compose');
-googleProvider.addScope('https://www.googleapis.com/auth/gmail.readonly');
-googleProvider.addScope('https://www.googleapis.com/auth/userinfo.email');
+googleProvider.setCustomParameters({
+  prompt: 'consent',
+});
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string | null) => void,
