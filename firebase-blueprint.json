@@ -1,0 +1,88 @@
+{
+  "entities": {
+    "Contact": {
+      "title": "Contact",
+      "description": "Saved contact in user address book",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string", "maxLength": 100 },
+        "email": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "enum": ["Work", "Personal", "VIP", "Client", "General"] },
+        "notes": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "email", "category", "createdAt"]
+    },
+    "ScheduledEmail": {
+      "title": "ScheduledEmail",
+      "description": "Queued email scheduled for delayed dispatch via Gmail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "senderEmail": { "type": "string", "maxLength": 200 },
+        "toEmail": { "type": "string", "maxLength": 200 },
+        "subject": { "type": "string", "maxLength": 300 },
+        "body": { "type": "string", "maxLength": 10000 },
+        "scheduledAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "sent", "failed", "cancelled"] },
+        "attachmentCount": { "type": "number" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "senderEmail", "toEmail", "subject", "body", "scheduledAt", "status", "createdAt"]
+    },
+    "EmailLog": {
+      "title": "EmailLog",
+      "description": "History log of sent emails via Gmail",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "toEmail": { "type": "string", "maxLength": 200 },
+        "subject": { "type": "string", "maxLength": 300 },
+        "snippet": { "type": "string", "maxLength": 500 },
+        "attachmentCount": { "type": "number" },
+        "sentAt": { "type": "string" },
+        "status": { "type": "string", "enum": ["success", "failed"] }
+      },
+      "required": ["userId", "toEmail", "subject", "sentAt", "status"]
+    },
+    "SavedAttachment": {
+      "title": "SavedAttachment",
+      "description": "Reusable attachment template stored in user document bank",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "filename": { "type": "string", "maxLength": 200 },
+        "mimeType": { "type": "string", "maxLength": 100 },
+        "size": { "type": "number" },
+        "tag": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "filename", "mimeType", "size", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "Saved address book contacts for a user"
+    },
+    "/users/{userId}/scheduledEmails/{emailId}": {
+      "schema": "ScheduledEmail",
+      "description": "Scheduled email queue for a user"
+    },
+    "/users/{userId}/emailLogs/{logId}": {
+      "schema": "EmailLog",
+      "description": "Sent email activity history for a user"
+    },
+    "/users/{userId}/savedAttachments/{attachmentId}": {
+      "schema": "SavedAttachment",
+      "description": "Saved reusable attachment files for a user"
+    }
+  }
+}

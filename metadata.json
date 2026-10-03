@@ -1,0 +1,6 @@
+{
+  "name": "SwiftSend Gmail - Automated Attachment & Email Transfer",
+  "description": "Send documents, images, and videos with automated attachment processing, saved address book, and scheduled sending via your Gmail account.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
