@@ -31,7 +31,6 @@ import { AddressBook } from './components/AddressBook';
 import { ScheduledQueue } from './components/ScheduledQueue';
 import { EmailLogs } from './components/EmailLogs';
 import { AttachmentBank } from './components/AttachmentBank';
-import { IntegrationGuide } from './components/IntegrationGuide';
 import { ConfirmModal } from './components/ConfirmModal';
 import { AuthLanding } from './components/AuthLanding';
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
@@ -582,8 +581,6 @@ export default function App() {
               }}
             />
           )}
-
-          {activeTab === 'integration' && <IntegrationGuide />}
         </main>
       </div>
 

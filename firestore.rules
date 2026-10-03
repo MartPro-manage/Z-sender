@@ -2,88 +2,34 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
     // Default deny catch-all
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // User subcollection rules
-    match /users/{userId} {
-      allow read: if isOwner(userId);
-      allow write: if isOwner(userId);
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
 
-      // Address Book Contacts
-      match /contacts/{contactId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
-          && isValidId(contactId)
-          && incoming().userId == userId
-          && incoming().name is string && incoming().name.size() > 0 && incoming().name.size() <= 100
-          && incoming().email is string && incoming().email.size() > 0 && incoming().email.size() <= 200;
-        allow update: if isOwner(userId)
-          && isValidId(contactId)
-          && incoming().userId == userId
-          && incoming().name is string && incoming().name.size() <= 100
-          && incoming().email is string && incoming().email.size() <= 200;
-        allow delete: if isOwner(userId) && isValidId(contactId);
-      }
+    // Contacts Address Book
+    match /users/{userId}/contacts/{contactId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
 
-      // Scheduled Emails
-      match /scheduledEmails/{emailId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
-          && isValidId(emailId)
-          && incoming().userId == userId
-          && incoming().toEmail is string && incoming().toEmail.size() <= 200
-          && incoming().subject is string && incoming().subject.size() <= 300;
-        allow update: if isOwner(userId)
-          && isValidId(emailId)
-          && incoming().userId == userId;
-        allow delete: if isOwner(userId) && isValidId(emailId);
-      }
+    // Scheduled Emails Queue
+    match /users/{userId}/scheduledEmails/{emailId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
 
-      // Email Logs
-      match /emailLogs/{logId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
-          && isValidId(logId)
-          && incoming().userId == userId
-          && incoming().toEmail is string && incoming().toEmail.size() <= 200;
-        allow update: if isOwner(userId) && isValidId(logId) && incoming().userId == userId;
-        allow delete: if isOwner(userId) && isValidId(logId);
-      }
+    // Email Activity Logs
+    match /users/{userId}/emailLogs/{logId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
+    }
 
-      // Saved Reusable Attachments
-      match /savedAttachments/{attachmentId} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
-          && isValidId(attachmentId)
-          && incoming().userId == userId
-          && incoming().filename is string && incoming().filename.size() <= 200;
-        allow update: if isOwner(userId) && isValidId(attachmentId) && incoming().userId == userId;
-        allow delete: if isOwner(userId) && isValidId(attachmentId);
-      }
+    // Saved Reusable Attachments
+    match /users/{userId}/savedAttachments/{attachmentId} {
+      allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
   }
 }

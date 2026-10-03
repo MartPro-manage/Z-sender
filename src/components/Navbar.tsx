@@ -1,8 +1,8 @@
-import React from 'react';
-import { Send, BookOpen, Clock, History, FolderKanban, LogOut, CheckCircle2, ShieldCheck, Plus, Code2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Send, BookOpen, Clock, History, FolderKanban, LogOut, CheckCircle2, ShieldCheck, Plus, Copy, Check } from 'lucide-react';
 import { User } from 'firebase/auth';
 
-export type ActiveTab = 'composer' | 'address-book' | 'scheduled-queue' | 'sent-history' | 'attachment-bank' | 'integration';
+export type ActiveTab = 'composer' | 'address-book' | 'scheduled-queue' | 'sent-history' | 'attachment-bank';
 
 interface NavbarProps {
   user: User;
@@ -21,6 +21,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   scheduledCount,
   contactCount,
 }) => {
+  const [copiedId, setCopiedId] = useState(false);
+
+  const handleCopyId = () => {
+    navigator.clipboard.writeText(user.uid);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+  };
+
   return (
     <header className="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800 px-4 lg:px-8 py-3 transition">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
@@ -38,9 +46,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                   Gmail Connected
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-xs text-slate-400 font-mono">
-                <span>From:</span>
-                <span className="text-indigo-300 font-semibold truncate max-w-[200px]">{user.email}</span>
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
+                <span className="truncate max-w-[150px]">{user.email}</span>
+                <span className="text-slate-600">|</span>
+                <button
+                  onClick={handleCopyId}
+                  className="text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold cursor-pointer border border-indigo-500/20 bg-indigo-500/5 px-2 py-0.5 rounded-md text-[10px] transition"
+                  title="Copy your Connection ID for integration"
+                >
+                  {copiedId ? <Check className="w-2.5 h-3" /> : <Copy className="w-2.5 h-3" />}
+                  <span>{copiedId ? 'Copied ID!' : 'Copy Connection ID'}</span>
+                </button>
               </div>
             </div>
           </div>
