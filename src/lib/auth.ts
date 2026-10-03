@@ -1,25 +1,17 @@
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  updateProfile,
-  onAuthStateChanged,
-  User,
-  signOut,
-  deleteUser,
-  sendPasswordResetEmail,
-  GoogleAuthProvider,
-  signInWithPopup,
-} from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
-let cachedAccessToken: string | null = null;
+const provider = new GoogleAuthProvider();
 
-const googleProvider = new GoogleAuthProvider();
-googleProvider.addScope('https://www.googleapis.com/auth/gmail.send');
-googleProvider.addScope('https://www.googleapis.com/auth/gmail.compose');
-googleProvider.setCustomParameters({
-  prompt: 'consent',
-});
+// Scopes for Gmail, user profile, and contacts
+provider.addScope('https://www.googleapis.com/auth/gmail.send');
+provider.addScope('https://www.googleapis.com/auth/gmail.compose');
+provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
+provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+
+let isSigningIn = false;
+let cachedAccessToken: string | null = null;
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string | null) => void,
@@ -35,49 +27,32 @@ export const initAuth = (
   });
 };
 
-export const signUpWithEmail = async (
-  email: string,
-  password: string,
-  displayName?: string
-): Promise<User> => {
-  const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
-  if (displayName && displayName.trim()) {
-    try {
-      await updateProfile(result.user, { displayName: displayName.trim() });
-    } catch (e) {
-      console.warn('Failed to update display name:', e);
+export const googleSignIn = async (): Promise<{ user: User; accessToken: string }> => {
+  try {
+    isSigningIn = true;
+    const result = await signInWithPopup(auth, provider);
+    const credential = GoogleAuthProvider.credentialFromResult(result);
+    
+    if (!credential?.accessToken) {
+      throw new Error('Failed to retrieve access token from Google Sign-In.');
     }
+
+    cachedAccessToken = credential.accessToken;
+    return { user: result.user, accessToken: cachedAccessToken };
+  } catch (error: any) {
+    if (
+      error?.code === 'auth/popup-closed-by-user' ||
+      error?.code === 'auth/cancelled-popup-request'
+    ) {
+      // User closed the sign-in popup - handle gracefully without noisy error logs
+      console.warn('Google Sign-In popup was closed by user before completion.');
+    } else {
+      console.error('Google Sign-In Error:', error);
+    }
+    throw error;
+  } finally {
+    isSigningIn = false;
   }
-  return result.user;
-};
-
-export const signInWithEmail = async (
-  email: string,
-  password: string
-): Promise<User> => {
-  const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-  return result.user;
-};
-
-export const requestGmailSenderAuthorization = async (): Promise<string> => {
-  const result = await signInWithPopup(auth, googleProvider);
-  const credential = GoogleAuthProvider.credentialFromResult(result);
-  if (!credential?.accessToken) {
-    throw new Error('Could not retrieve Gmail access token from Google.');
-  }
-  cachedAccessToken = credential.accessToken;
-  return cachedAccessToken;
-};
-
-export const resetPassword = async (email: string): Promise<void> => {
-  await sendPasswordResetEmail(auth, email.trim());
-};
-
-export const deleteCurrentAccount = async (): Promise<void> => {
-  if (auth.currentUser) {
-    await deleteUser(auth.currentUser);
-  }
-  cachedAccessToken = null;
 };
 
 export const getAccessToken = async (): Promise<string | null> => {

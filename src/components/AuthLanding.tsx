@@ -1,93 +1,13 @@
-import React, { useState } from 'react';
-import { Mail, Lock, User as UserIcon, ShieldCheck, Zap, Paperclip, Users, Clock, Send, Eye, EyeOff, AlertCircle, ArrowRight, CheckCircle2, KeyRound } from 'lucide-react';
+import React from 'react';
+import { Mail, ShieldCheck, Zap, FileText, Send, Users, Clock, Paperclip } from 'lucide-react';
 
 interface AuthLandingProps {
-  onSignIn: (email: string, password: string) => Promise<void>;
-  onSignUp: (email: string, password: string, displayName?: string) => Promise<void>;
-  onResetPassword?: (email: string) => Promise<{ success: boolean; error?: string }>;
+  onSignIn: () => void;
   isLoading: boolean;
   error?: string | null;
-  onClearError?: () => void;
 }
 
-export const AuthLanding: React.FC<AuthLandingProps> = ({
-  onSignIn,
-  onSignUp,
-  onResetPassword,
-  isLoading,
-  error,
-  onClearError,
-}) => {
-  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
-  const [isResetting, setIsResetting] = useState(false);
-
-  const handleTabChange = (newMode: 'signin' | 'signup' | 'forgot') => {
-    setMode(newMode);
-    setValidationError(null);
-    setResetSuccessMsg(null);
-    if (onClearError) onClearError();
-  };
-
-  const handleSwitchToSignIn = () => {
-    setMode('signin');
-    setValidationError(null);
-    setResetSuccessMsg(null);
-    if (onClearError) onClearError();
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setValidationError(null);
-    setResetSuccessMsg(null);
-
-    if (mode === 'forgot') {
-      if (!email.trim()) {
-        setValidationError('Please enter your email address to receive a reset link.');
-        return;
-      }
-      if (onResetPassword) {
-        setIsResetting(true);
-        const res = await onResetPassword(email.trim());
-        setIsResetting(false);
-        if (res.success) {
-          setResetSuccessMsg(`Password reset link sent to ${email.trim()}. Please check your email inbox.`);
-        } else {
-          setValidationError(res.error || 'Failed to send password reset email.');
-        }
-      }
-      return;
-    }
-
-    if (!email.trim() || !password) {
-      setValidationError('Please enter both email and password.');
-      return;
-    }
-
-    if (mode === 'signup') {
-      if (password.length < 6) {
-        setValidationError('Password must be at least 6 characters long.');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setValidationError('Passwords do not match. Please re-enter.');
-        return;
-      }
-      await onSignUp(email.trim(), password, displayName.trim());
-    } else {
-      await onSignIn(email.trim(), password);
-    }
-  };
-
-  const isEmailAlreadyInUse =
-    (error && (error.toLowerCase().includes('already exists') || error.toLowerCase().includes('already registered') || error.toLowerCase().includes('already-in-use'))) || false;
-
+export const AuthLanding: React.FC<AuthLandingProps> = ({ onSignIn, isLoading, error }) => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between relative overflow-hidden">
       {/* Background Decorative Gradients */}
@@ -102,263 +22,74 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({
           </div>
           <div>
             <span className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-indigo-200 bg-clip-text text-transparent">
-              SwiftSend
+              SwiftSend Gmail
             </span>
             <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full ml-2 uppercase tracking-wider">
-              Email Dispatch & Transfer
+              Automated Attachments
             </span>
           </div>
         </div>
 
         <div className="hidden sm:flex items-center gap-2 text-xs text-slate-400 border border-slate-800 bg-slate-900/60 px-3 py-1.5 rounded-full">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Secure Cloud Account Storage</span>
+          <span>Official Google Workspace Integration</span>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-5xl mx-auto px-6 py-10 flex-1 flex flex-col items-center justify-center relative z-10 w-full">
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-indigo-300 text-xs font-medium mb-6 shadow-inner">
+      {/* Main Hero */}
+      <main className="max-w-5xl mx-auto px-6 py-12 text-center flex-1 flex flex-col items-center justify-center relative z-10">
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900 border border-slate-800 text-indigo-300 text-xs font-medium mb-8 shadow-inner">
           <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-          <span>Automated Attachments, Address Book & Scheduled Transfers</span>
+          <span>Fast Direct Gmail Email Transfers & Scheduling</span>
         </div>
 
-        <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight leading-tight max-w-3xl mb-4 text-center">
-          Send Documents, Images & Videos <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-200 bg-clip-text text-transparent">Effortlessly</span>
+        <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight leading-tight max-w-3xl mb-6">
+          Send Documents, Images & Videos <span className="bg-gradient-to-r from-indigo-400 via-purple-300 to-indigo-200 bg-clip-text text-transparent">Directly from Your Gmail</span>
         </h1>
 
-        <p className="text-slate-400 text-sm sm:text-base max-w-xl mb-8 leading-relaxed text-center">
-          Sign in or create your SwiftSend account to dispatch email attachments with RFC encoding, manage your contacts, and schedule transfers.
+        <p className="text-slate-400 text-base sm:text-lg max-w-2xl mb-10 leading-relaxed">
+          Automate file attachment processing, manage your address book, and schedule emails effortlessly. Messages transfer directly from your personal or work Gmail address.
         </p>
 
-        {/* Auth Form Card */}
-        <div className="w-full max-w-md bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-xl mb-12">
-          {/* Mode Switch Tabs */}
-          <div className="grid grid-cols-2 p-1 bg-slate-950 rounded-2xl border border-slate-800/80 mb-6">
+        {/* Error Alert */}
+        {error && (
+          <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-300 text-sm max-w-md w-full text-left space-y-3 shadow-lg">
+            <div>
+              <p className="font-semibold mb-1">Authentication Notice</p>
+              <p className="text-xs text-rose-300/80">{error}</p>
+            </div>
             <button
-              type="button"
-              onClick={() => handleTabChange('signin')}
-              className={`py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
-                mode === 'signin' || mode === 'forgot'
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
+              onClick={() => window.open(window.location.href, '_blank')}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-rose-600 to-rose-500 hover:from-rose-500 hover:to-rose-400 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
             >
-              Sign In
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('signup')}
-              className={`py-2.5 text-xs font-bold rounded-xl transition cursor-pointer ${
-                mode === 'signup'
-                  ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow-md shadow-indigo-600/30'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              Create Account
+              <span>Launch Standalone Tab (Recommended Fix)</span>
             </button>
           </div>
+        )}
 
-          {/* Validation or Server Error with 1-Click Action */}
-          {(validationError || error) && (
-            <div className="mb-5 p-3.5 bg-rose-500/10 border border-rose-500/20 rounded-2xl text-rose-300 text-xs flex flex-col gap-2.5">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-                <div className="flex-1 leading-relaxed">
-                  {validationError || error}
-                </div>
-              </div>
-
-              {/* Quick switch to Sign In if email already exists */}
-              {isEmailAlreadyInUse && (
-                <button
-                  type="button"
-                  onClick={handleSwitchToSignIn}
-                  className="mt-1 w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition shadow cursor-pointer"
-                >
-                  <span>Sign In with {email || 'this email'}</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Password Reset Success Message */}
-          {resetSuccessMsg && (
-            <div className="mb-5 p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-300 text-xs flex items-start gap-2.5">
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
-              <div className="flex-1 leading-relaxed font-medium">
-                {resetSuccessMsg}
-              </div>
-            </div>
-          )}
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-            {mode === 'signup' && (
-              <div>
-                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1.5 text-[11px]">
-                  Full Name (Optional)
-                </label>
-                <div className="relative">
-                  <UserIcon className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
-                    placeholder="e.g. Alex Rivera"
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-10 pr-3.5 py-3 text-white outline-none placeholder-slate-600 transition"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1.5 text-[11px]">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
-                  className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-10 pr-3.5 py-3 text-white outline-none placeholder-slate-600 font-mono transition"
-                />
-              </div>
-            </div>
-
-            {mode !== 'forgot' && (
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block font-semibold text-slate-300 uppercase tracking-wider text-[11px]">
-                    Password
-                  </label>
-                  {mode === 'signin' && (
-                    <button
-                      type="button"
-                      onClick={() => handleTabChange('forgot')}
-                      className="text-[11px] text-indigo-400 hover:text-indigo-300 cursor-pointer font-medium"
-                    >
-                      Forgot password?
-                    </button>
-                  )}
-                </div>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder={mode === 'signup' ? 'At least 6 characters' : 'Enter your password'}
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-10 pr-10 py-3 text-white outline-none placeholder-slate-600 transition"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {mode === 'signup' && (
-              <div>
-                <label className="block font-semibold text-slate-300 uppercase tracking-wider mb-1.5 text-[11px]">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter your password"
-                    className="w-full bg-slate-950 border border-slate-800 focus:border-indigo-500 rounded-xl pl-10 pr-3.5 py-3 text-white outline-none placeholder-slate-600 transition"
-                  />
-                </div>
-              </div>
-            )}
-
-            {mode === 'forgot' ? (
-              <div className="space-y-2 pt-2">
-                <button
-                  type="submit"
-                  disabled={isResetting}
-                  className="w-full py-3.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  {isResetting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span>Sending Reset Link...</span>
-                    </>
-                  ) : (
-                    <>
-                      <KeyRound className="w-4 h-4" />
-                      <span>Send Password Reset Email</span>
-                    </>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleTabChange('signin')}
-                  className="w-full py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-white text-xs font-semibold transition"
-                >
-                  Back to Sign In
-                </button>
-              </div>
+        {/* Official Google GSI Sign-In Button */}
+        <div className="flex flex-col items-center gap-4 mb-16">
+          <button
+            onClick={onSignIn}
+            disabled={isLoading}
+            className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 bg-white hover:bg-slate-50 text-slate-900 font-bold text-base rounded-2xl shadow-xl shadow-white/10 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+          >
+            {isLoading ? (
+              <div className="w-6 h-6 border-2 border-slate-900/30 border-t-slate-900 rounded-full animate-spin" />
             ) : (
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-3.5 mt-2 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-sm shadow-xl shadow-indigo-600/30 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>{mode === 'signup' ? 'Creating Account...' : 'Signing In...'}</span>
-                  </>
-                ) : (
-                  <span>{mode === 'signup' ? 'Create Account' : 'Sign In'}</span>
-                )}
-              </button>
+              <svg className="w-6 h-6" viewBox="0 0 48 48">
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                <path fill="none" d="M0 0h48v48H0z" />
+              </svg>
             )}
-          </form>
-
-          {/* Switch Prompt */}
-          {mode !== 'forgot' && (
-            <div className="mt-5 text-center text-xs text-slate-400">
-              {mode === 'signin' ? (
-                <p>
-                  Don't have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange('signup')}
-                    className="text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer underline underline-offset-2"
-                  >
-                    Create one now
-                  </button>
-                </p>
-              ) : (
-                <p>
-                  Already have an account?{' '}
-                  <button
-                    type="button"
-                    onClick={() => handleTabChange('signin')}
-                    className="text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer underline underline-offset-2"
-                  >
-                    Sign in here
-                  </button>
-                </p>
-              )}
-            </div>
-          )}
+            <span>{isLoading ? 'Connecting to Google...' : 'Continue with Google Account'}</span>
+          </button>
+          <p className="text-xs text-slate-500">
+            Sends emails directly from your logged-in Gmail address. No password required.
+          </p>
         </div>
 
         {/* Key Feature Cards Grid */}
@@ -391,15 +122,15 @@ export const AuthLanding: React.FC<AuthLandingProps> = ({
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 mb-3">
               <Send className="w-5 h-5" />
             </div>
-            <h3 className="font-bold text-white text-base mb-1">Direct Email Transfers</h3>
-            <p className="text-xs text-slate-400">Instant background transfers with comprehensive delivery auditing and activity logs.</p>
+            <h3 className="font-bold text-white text-base mb-1">Your Logged-In Gmail</h3>
+            <p className="text-xs text-slate-400">Transfers execute directly from your authenticated Gmail address using official Google APIs.</p>
           </div>
         </div>
       </main>
 
       {/* Footer */}
       <footer className="px-6 py-6 border-t border-slate-900 text-center text-xs text-slate-500 relative z-10">
-        <span>SwiftSend • Secure Email Dispatch & Transfer Engine</span>
+        <span>SwiftSend Gmail • Secure Google Account Authentication & Transfer Engine</span>
       </footer>
     </div>
   );

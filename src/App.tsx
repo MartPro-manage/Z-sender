@@ -1,15 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { User } from 'firebase/auth';
-import {
-  initAuth,
-  signInWithEmail,
-  signUpWithEmail,
-  logout,
-  getAccessToken,
-  deleteCurrentAccount,
-  resetPassword,
-  requestGmailSenderAuthorization,
-} from './lib/auth';
+import { initAuth, googleSignIn, logout, getAccessToken } from './lib/auth';
 import {
   FileAttachment,
   buildRawRfc822Message,
@@ -21,7 +12,6 @@ import {
   ScheduledEmailData,
   EmailLogData,
   SavedAttachmentData,
-  SenderSettingsData,
   getContacts,
   saveContact,
   deleteContact,
@@ -34,9 +24,6 @@ import {
   getSavedAttachments,
   saveAttachmentToBank,
   deleteSavedAttachment,
-  deleteAllUserData,
-  getUserSenderSettings,
-  saveUserSenderSettings,
 } from './lib/firestoreService';
 import { Navbar, ActiveTab } from './components/Navbar';
 import { Composer } from './components/Composer';
@@ -45,17 +32,12 @@ import { ScheduledQueue } from './components/ScheduledQueue';
 import { EmailLogs } from './components/EmailLogs';
 import { AttachmentBank } from './components/AttachmentBank';
 import { AuthLanding } from './components/AuthLanding';
-import { SenderConfigModal } from './components/SenderConfigModal';
 import { CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isGmailAuthorized, setIsGmailAuthorized] = useState(false);
-  const [senderSettings, setSenderSettings] = useState<SenderSettingsData | null>(null);
-  const [isSenderModalOpen, setIsSenderModalOpen] = useState(false);
 
   // Active View Tab
   const [activeTab, setActiveTab] = useState<ActiveTab>('composer');
@@ -89,17 +71,12 @@ export default function App() {
   // Initialize Firebase Auth listener
   useEffect(() => {
     const unsubscribe = initAuth(
-      (authUser, token) => {
+      (authUser) => {
         setUser(authUser);
-        if (token) {
-          setIsGmailAuthorized(true);
-        }
         setIsAuthLoading(false);
       },
       () => {
         setUser(null);
-        setIsGmailAuthorized(false);
-        setSenderSettings(null);
         setIsAuthLoading(false);
       }
     );
@@ -109,18 +86,16 @@ export default function App() {
   // Fetch Firestore user data when authenticated
   const loadUserData = async (uid: string) => {
     try {
-      const [cList, sList, lList, aList, sSettings] = await Promise.all([
+      const [cList, sList, lList, aList] = await Promise.all([
         getContacts(uid).catch(() => []),
         getScheduledEmails(uid).catch(() => []),
         getEmailLogs(uid).catch(() => []),
         getSavedAttachments(uid).catch(() => []),
-        getUserSenderSettings(uid).catch(() => null),
       ]);
       setContacts(cList);
       setScheduledEmails(sList);
       setEmailLogs(lList);
       setSavedAttachments(aList);
-      setSenderSettings(sSettings);
     } catch (err) {
       console.error('Error loading Firestore data:', err);
     }
@@ -134,13 +109,11 @@ export default function App() {
 
   // Background Worker: Checks pending scheduled emails every 15s and sends due items
   useEffect(() => {
-    if (!user || !user.email) return;
+    if (!user) return;
 
     const interval = setInterval(async () => {
       const token = await getAccessToken();
-      const hasAppPassword = Boolean(senderSettings?.appPassword);
-
-      if (!token && !hasAppPassword) return;
+      if (!token || !user.email) return;
 
       const now = new Date().getTime();
       const pending = scheduledEmails.filter((e) => e.status === 'pending');
@@ -148,46 +121,22 @@ export default function App() {
       for (const item of pending) {
         if (new Date(item.scheduledAt).getTime() <= now) {
           try {
-            const formattedAtts = item.attachmentsData
-              ? item.attachmentsData.map((a) => ({
-                  filename: a.filename,
-                  mimeType: a.mimeType,
-                  size: a.size,
-                  base64Data: a.base64Data,
-                }))
-              : [];
+            const rawMsg = buildRawRfc822Message({
+              fromEmail: user.email,
+              toEmail: item.toEmail,
+              subject: item.subject,
+              bodyHtml: item.body,
+              attachments: item.attachmentsData
+                ? item.attachmentsData.map((a) => ({
+                    filename: a.filename,
+                    mimeType: a.mimeType,
+                    size: a.size,
+                    base64Data: a.base64Data,
+                  }))
+                : [],
+            });
 
-            if (hasAppPassword && senderSettings?.appPassword) {
-              const res = await fetch('/api/send-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  senderEmail: user.email,
-                  appPassword: senderSettings.appPassword,
-                  smtpHost: senderSettings.smtpHost,
-                  smtpPort: senderSettings.smtpPort,
-                  smtpSecure: senderSettings.smtpSecure,
-                  toEmail: item.toEmail,
-                  subject: item.subject,
-                  bodyHtml: item.body,
-                  attachments: formattedAtts,
-                }),
-              });
-              if (!res.ok) {
-                const eJson = await res.json().catch(() => null);
-                throw new Error(eJson?.error || 'Failed to dispatch scheduled email');
-              }
-            } else if (token) {
-              const rawMsg = buildRawRfc822Message({
-                fromEmail: user.email || '',
-                toEmail: item.toEmail,
-                subject: item.subject,
-                bodyHtml: item.body,
-                attachments: formattedAtts,
-              });
-              await sendGmailMessage(token, rawMsg);
-            }
-
+            await sendGmailMessage(token, rawMsg);
             await updateScheduledEmailStatus(user.uid, item.id, 'sent');
             await logEmailSent(user.uid, {
               toEmail: item.toEmail,
@@ -208,172 +157,55 @@ export default function App() {
     }, 15000);
 
     return () => clearInterval(interval);
-  }, [user, scheduledEmails, senderSettings]);
+  }, [user, scheduledEmails]);
 
-  // Helper to map Firebase Auth error codes to user-friendly messages
-  const formatAuthError = (err: any): string => {
-    const code = err?.code || '';
-    switch (code) {
-      case 'auth/invalid-email':
-        return 'Please enter a valid email address.';
-      case 'auth/user-disabled':
-        return 'This account has been disabled. Please contact support.';
-      case 'auth/user-not-found':
-      case 'auth/invalid-credential':
-        return 'Invalid email or password. Please verify your credentials or create a new account.';
-      case 'auth/wrong-password':
-        return 'Incorrect password. Please try again or create a new account.';
-      case 'auth/email-already-in-use':
-        return 'An account with this email address already exists. Please sign in instead.';
-      case 'auth/weak-password':
-        return 'Password should be at least 6 characters long.';
-      case 'auth/operation-not-allowed':
-        return 'Email/Password sign-in is not enabled in your Firebase console. Please enable Email/Password under Authentication > Sign-in method in Firebase Console.';
-      case 'auth/too-many-requests':
-        return 'Too many unsuccessful attempts. Access has been temporarily restricted. Please try again in a few moments.';
-      case 'auth/network-request-failed':
-        return 'Network connection issue. Please check your internet connection and try again.';
-      default:
-        return err?.message || 'Authentication failed. Please check your details and try again.';
-    }
-  };
-
-  // Auth Actions: Sign In & Sign Up
-  const handleSignIn = async (email: string, pass: string) => {
+  // Auth Actions
+  const handleGoogleSignIn = async () => {
     setAuthError(null);
-    setIsAuthSubmitting(true);
+    setIsAuthLoading(true);
     try {
-      const loggedUser = await signInWithEmail(email, pass);
-      setUser(loggedUser);
+      const res = await googleSignIn();
+      setUser(res.user);
     } catch (err: any) {
-      console.error('Sign-in error:', err);
-      setAuthError(formatAuthError(err));
-    } finally {
-      setIsAuthSubmitting(false);
-    }
-  };
-
-  const handleSignUp = async (email: string, pass: string, displayName?: string) => {
-    setAuthError(null);
-    setIsAuthSubmitting(true);
-    try {
-      const newUser = await signUpWithEmail(email, pass, displayName);
-      setUser(newUser);
-    } catch (err: any) {
-      console.error('Sign-up error:', err);
-      setAuthError(formatAuthError(err));
-    } finally {
-      setIsAuthSubmitting(false);
-    }
-  };
-
-  const handleResetPassword = async (email: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      await resetPassword(email);
-      return { success: true };
-    } catch (err: any) {
-      console.error('Reset password error:', err);
-      const code = err?.code || '';
-      let msg = err?.message || 'Failed to send reset link.';
-      if (code === 'auth/user-not-found') {
-        msg = 'No account found with this email address.';
-      } else if (code === 'auth/invalid-email') {
-        msg = 'Please enter a valid email address.';
+      if (
+        err?.code === 'auth/popup-closed-by-user' ||
+        err?.code === 'auth/cancelled-popup-request' ||
+        err?.message?.includes('popup-closed-by-user') ||
+        err?.code === 'auth/popup-blocked' ||
+        err?.message?.includes('popup-blocked')
+      ) {
+        // Handle user cancelling or browser blocking the sign-in popup
+        setAuthError(
+          'Sign-in window was closed or blocked: This can happen if you closed the window manually, or if your browser/adblocker blocked the popup. Please click "Continue with Google Account" to try again, allow popups for this site, or launch the app in a standalone window using the top-right "Open in new window" button.'
+        );
+      } else if (err?.code === 'auth/unauthorized-domain' || err?.message?.includes('unauthorized-domain')) {
+        setAuthError(
+          'Unauthorized Domain: To log in from your Vercel deployment, you must add your Vercel URL (e.g., yoursite.vercel.app) to the "Authorized Domains" list in your Firebase Console (Authentication -> Settings -> Authorized Domains).'
+        );
+      } else if (
+        err?.code === 'auth/internal-error' ||
+        err?.message?.includes('auth/internal-error') ||
+        err?.code === 'auth/network-request-failed' ||
+        err?.message?.includes('network-request-failed')
+      ) {
+        setAuthError(
+          'Iframe Storage Blocked (auth/internal-error): This app is currently running inside a preview iframe. To sign in successfully, please click the "Open in new window" or "Launch App" icon at the top-right of the preview panel to run the app standalone, or enable third-party cookies in your browser settings.'
+        );
+      } else {
+        console.error('Sign-In Error:', err);
+        setAuthError(err?.message || 'Failed to authenticate with Google Account.');
       }
-      return { success: false, error: msg };
+    } finally {
+      setIsAuthLoading(false);
     }
   };
 
   const handleLogout = async () => {
     await logout();
     setUser(null);
-    setIsGmailAuthorized(false);
   };
 
-  // Connect / Authorize Gmail Sender
-  const handleConnectGmail = async () => {
-    try {
-      setGlobalBanner({
-        type: 'success',
-        message: 'Opening Google authorization window to connect Gmail...',
-      });
-      const token = await requestGmailSenderAuthorization();
-      if (token) {
-        setIsGmailAuthorized(true);
-        setGlobalBanner({
-          type: 'success',
-          message: 'Gmail successfully connected! Real inbox delivery is enabled.',
-        });
-      }
-    } catch (err: any) {
-      console.error('Connect Gmail error:', err);
-      if (
-        err?.code === 'auth/popup-closed-by-user' ||
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.includes('popup-closed-by-user')
-      ) {
-        setGlobalBanner({
-          type: 'error',
-          message: 'Google authorization window was closed. Click "Connect Gmail" to try again.',
-        });
-      } else {
-        setGlobalBanner({
-          type: 'error',
-          message: `Failed to connect Gmail: ${err?.message || 'Check your browser popup permissions.'}`,
-        });
-      }
-    } finally {
-      setTimeout(() => setGlobalBanner(null), 6000);
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!user) return;
-    const confirmDelete = window.confirm(
-      `Are you sure you want to permanently delete your account (${user.email}) and all saved contacts, scheduled transfers, saved attachments, and sent logs?\n\nThis action cannot be undone.`
-    );
-    if (!confirmDelete) return;
-
-    try {
-      setIsSendingInProgress(true);
-      setGlobalBanner({
-        type: 'success',
-        message: 'Purging database records and deleting your account...',
-      });
-
-      // 1. Wipe all user records from Firestore
-      await deleteAllUserData(user.uid);
-
-      // 2. Delete user from Firebase Authentication
-      await deleteCurrentAccount();
-
-      setUser(null);
-      setIsGmailAuthorized(false);
-      setGlobalBanner(null);
-      alert('Your account and all associated data have been permanently deleted.');
-    } catch (err: any) {
-      console.error('Account deletion error:', err);
-      if (err?.code === 'auth/requires-recent-login') {
-        alert('For security reasons, deleting your account requires a recent sign-in. Please sign out, sign back in, and try deleting your account again.');
-      } else {
-        alert(`Failed to delete account: ${err?.message || 'Unknown error'}`);
-      }
-    } finally {
-      setIsSendingInProgress(false);
-    }
-  };
-
-  const handleSaveSenderSettings = async (settings: SenderSettingsData) => {
-    if (!user) return;
-    await saveUserSenderSettings(user.uid, settings);
-    setSenderSettings(settings);
-    setGlobalBanner({
-      type: 'success',
-      message: 'Email sender credentials verified and saved! Real dispatch is ready.',
-    });
-  };
-
-  // Trigger Direct Email Sending
+  // Trigger Direct Gmail Sending instantly
   const handleInitiateSendNow = async (data: {
     toEmail: string;
     subject: string;
@@ -386,101 +218,43 @@ export default function App() {
     setIsSendingInProgress(true);
     setGlobalBanner({
       type: 'success',
-      message: 'Processing real email delivery...',
+      message: 'Sending email via Gmail API...',
     });
 
     try {
+      let token = await getAccessToken();
+      if (!token) {
+        // Prompt re-auth if token expired
+        const res = await googleSignIn();
+        token = res?.accessToken || null;
+      }
+      if (!token) {
+        throw new Error('Could not retrieve access token. Please sign in again.');
+      }
+
       const { toEmail, subject, bodyHtml, attachments, sendSelfCopy } = data;
-      const hasAppPassword = Boolean(senderSettings?.appPassword);
 
-      if (hasAppPassword && senderSettings?.appPassword) {
-        // Direct dispatch using App Password & SMTP backend (100% bypasses Google OAuth verification restrictions)
-        const res = await fetch('/api/send-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            senderEmail: user.email,
-            appPassword: senderSettings.appPassword,
-            smtpHost: senderSettings.smtpHost,
-            smtpPort: senderSettings.smtpPort,
-            smtpSecure: senderSettings.smtpSecure,
-            toEmail,
-            subject,
-            bodyHtml,
-            attachments,
-          }),
-        });
+      // Build & Send raw RFC 822 email
+      const rawMsg = buildRawRfc822Message({
+        fromEmail: user.email,
+        toEmail,
+        subject,
+        bodyHtml,
+        attachments,
+      });
 
-        const sendRes = await res.json();
-        if (!res.ok) {
-          throw new Error(sendRes.error || 'Failed to dispatch email via SMTP.');
-        }
+      await sendGmailMessage(token, rawMsg);
 
-        // If sendSelfCopy is checked, also deliver copy to sender's own address
-        if (sendSelfCopy && user.email !== toEmail) {
-          await fetch('/api/send-email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              senderEmail: user.email,
-              appPassword: senderSettings.appPassword,
-              smtpHost: senderSettings.smtpHost,
-              smtpPort: senderSettings.smtpPort,
-              smtpSecure: senderSettings.smtpSecure,
-              toEmail: user.email,
-              subject: `[Copy] ${subject}`,
-              bodyHtml,
-              attachments,
-            }),
-          }).catch((e) => console.warn('Self copy note:', e));
-        }
-      } else {
-        // Fallback to OAuth token if user prefers OAuth
-        let token = await getAccessToken();
-        if (!token) {
-          try {
-            setGlobalBanner({
-              type: 'success',
-              message: 'Authorizing Gmail access for real inbox delivery...',
-            });
-            token = await requestGmailSenderAuthorization();
-            setIsGmailAuthorized(true);
-          } catch (oauthErr: any) {
-            console.warn('OAuth authorization failed, opening App Password setup:', oauthErr);
-            setIsSenderModalOpen(true);
-            throw new Error(
-              'Google OAuth blocked this app because verification is pending. Please enter your 16-character Gmail App Password to send real emails immediately.'
-            );
-          }
-        }
-
-        if (!token) {
-          setIsSenderModalOpen(true);
-          throw new Error('Please set up your Gmail App Password to enable real email sending.');
-        }
-
-        // Build RFC 822 MIME message with Base64 attachments
-        const rawMsg = buildRawRfc822Message({
+      // If sendSelfCopy is checked, also send copy to user's logged in address
+      if (sendSelfCopy && user.email !== toEmail) {
+        const selfMsg = buildRawRfc822Message({
           fromEmail: user.email,
-          toEmail,
-          subject,
+          toEmail: user.email,
+          subject: `[Copy] ${subject}`,
           bodyHtml,
           attachments,
         });
-
-        // Send via official Gmail REST API
-        await sendGmailMessage(token, rawMsg);
-
-        if (sendSelfCopy && user.email !== toEmail) {
-          const selfMsg = buildRawRfc822Message({
-            fromEmail: user.email,
-            toEmail: user.email,
-            subject: `[Copy] ${subject}`,
-            bodyHtml,
-            attachments,
-          });
-          await sendGmailMessage(token, selfMsg).catch((e) => console.warn('Self copy note:', e));
-        }
+        await sendGmailMessage(token, selfMsg).catch((e) => console.error('Self copy error:', e));
       }
 
       // Log sent transfer in Firestore
@@ -495,29 +269,20 @@ export default function App() {
 
       setGlobalBanner({
         type: 'success',
-        message: `Email successfully delivered to ${toEmail} with ${attachments.length} attachment(s)!`,
+        message: `Email successfully sent via Gmail to ${toEmail} with ${attachments.length} attachment(s)!`,
       });
 
       loadUserData(user.uid);
     } catch (err: any) {
       console.error('Send Error:', err);
-      let errMsg = err?.message || 'Check your transfer settings.';
-      if (
-        err?.code === 'auth/popup-closed-by-user' ||
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.message?.includes('popup-closed-by-user')
-      ) {
-        errMsg = 'Google authorization popup was closed. Use a 16-letter Gmail App Password instead.';
-        setIsSenderModalOpen(true);
-      }
       setGlobalBanner({
         type: 'error',
-        message: `Sending failed: ${errMsg}`,
+        message: `Sending failed: ${err.message || 'Check your Gmail permissions.'}`,
       });
       throw err;
     } finally {
       setIsSendingInProgress(false);
-      setTimeout(() => setGlobalBanner(null), 6000);
+      setTimeout(() => setGlobalBanner(null), 5000);
     }
   };
 
@@ -562,7 +327,7 @@ export default function App() {
     }
   };
 
-  // Save Draft Handler
+  // Save Gmail Draft Handler
   const handleSaveDraft = async (data: {
     toEmail: string;
     subject: string;
@@ -572,22 +337,25 @@ export default function App() {
     if (!user || !user.email) return;
 
     try {
-      const token = await getAccessToken();
-      if (token) {
-        const rawMsg = buildRawRfc822Message({
-          fromEmail: user.email,
-          toEmail: data.toEmail,
-          subject: data.subject,
-          bodyHtml: data.bodyHtml,
-          attachments: data.attachments,
-        });
-
-        await createGmailDraft(token, rawMsg);
+      let token = await getAccessToken();
+      if (!token) {
+        const res = await googleSignIn();
+        token = res.accessToken;
       }
+
+      const rawMsg = buildRawRfc822Message({
+        fromEmail: user.email,
+        toEmail: data.toEmail,
+        subject: data.subject,
+        bodyHtml: data.bodyHtml,
+        attachments: data.attachments,
+      });
+
+      await createGmailDraft(token, rawMsg);
 
       setGlobalBanner({
         type: 'success',
-        message: `Draft created successfully!`,
+        message: `Draft created in your Gmail account!`,
       });
     } catch (err: any) {
       setGlobalBanner({ type: 'error', message: `Failed to create draft: ${err.message}` });
@@ -628,26 +396,28 @@ export default function App() {
   const handleDispatchNow = async (item: ScheduledEmailData) => {
     if (!user || !user.email) return;
     try {
-      const token = await getAccessToken();
-      if (token) {
-        const rawMsg = buildRawRfc822Message({
-          fromEmail: user.email,
-          toEmail: item.toEmail,
-          subject: item.subject,
-          bodyHtml: item.body,
-          attachments: item.attachmentsData
-            ? item.attachmentsData.map((a) => ({
-                filename: a.filename,
-                mimeType: a.mimeType,
-                size: a.size,
-                base64Data: a.base64Data,
-              }))
-            : [],
-        });
-
-        await sendGmailMessage(token, rawMsg);
+      let token = await getAccessToken();
+      if (!token) {
+        const res = await googleSignIn();
+        token = res.accessToken;
       }
 
+      const rawMsg = buildRawRfc822Message({
+        fromEmail: user.email,
+        toEmail: item.toEmail,
+        subject: item.subject,
+        bodyHtml: item.body,
+        attachments: item.attachmentsData
+          ? item.attachmentsData.map((a) => ({
+              filename: a.filename,
+              mimeType: a.mimeType,
+              size: a.size,
+              base64Data: a.base64Data,
+            }))
+          : [],
+      });
+
+      await sendGmailMessage(token, rawMsg);
       await updateScheduledEmailStatus(user.uid, item.id, 'sent');
       await logEmailSent(user.uid, {
         toEmail: item.toEmail,
@@ -658,10 +428,9 @@ export default function App() {
         status: 'success',
       });
 
+      setGlobalBanner({ type: 'success', message: `Dispatched scheduled email to ${item.toEmail}!` });
       loadUserData(user.uid);
-      setGlobalBanner({ type: 'success', message: `Dispatched "${item.subject}" immediately!` });
     } catch (err: any) {
-      console.error('Dispatch error:', err);
       setGlobalBanner({ type: 'error', message: `Dispatch failed: ${err.message}` });
     } finally {
       setTimeout(() => setGlobalBanner(null), 4000);
@@ -707,22 +476,13 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center gap-4 text-slate-100">
         <div className="w-10 h-10 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-        <p className="text-xs font-mono text-slate-400">Loading SwiftSend Services...</p>
+        <p className="text-xs font-mono text-slate-400">Loading SwiftSend Gmail Services...</p>
       </div>
     );
   }
 
   if (!user) {
-    return (
-      <AuthLanding
-        onSignIn={handleSignIn}
-        onSignUp={handleSignUp}
-        onResetPassword={handleResetPassword}
-        isLoading={isAuthSubmitting}
-        error={authError}
-        onClearError={() => setAuthError(null)}
-      />
-    );
+    return <AuthLanding onSignIn={handleGoogleSignIn} isLoading={isAuthLoading} error={authError} />;
   }
 
   return (
@@ -733,7 +493,6 @@ export default function App() {
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           onLogout={handleLogout}
-          onDeleteAccount={handleDeleteAccount}
           scheduledCount={scheduledEmails.filter((e) => e.status === 'pending').length}
           contactCount={contacts.length}
         />
@@ -768,10 +527,6 @@ export default function App() {
               user={user}
               contacts={contacts}
               savedAttachmentsBank={savedAttachments}
-              isGmailAuthorized={isGmailAuthorized}
-              senderSettings={senderSettings}
-              onConnectGmail={handleConnectGmail}
-              onOpenSenderConfig={() => setIsSenderModalOpen(true)}
               onSendNow={handleInitiateSendNow}
               onScheduleSend={handleScheduleSend}
               onSaveDraft={handleSaveDraft}
@@ -822,20 +577,9 @@ export default function App() {
         </main>
       </div>
 
-      {/* Sender Configuration Modal for App Password / Direct SMTP */}
-      {user && (
-        <SenderConfigModal
-          isOpen={isSenderModalOpen}
-          onClose={() => setIsSenderModalOpen(false)}
-          senderEmail={user.email || ''}
-          currentSettings={senderSettings}
-          onSaveSettings={handleSaveSenderSettings}
-        />
-      )}
-
       {/* Footer */}
       <footer className="border-t border-slate-900 py-4 text-center text-[11px] text-slate-600">
-        SwiftSend • Transfers sent directly from <span className="text-slate-400">{user.email}</span>
+        SwiftSend Gmail • Transfers sent directly from <span className="text-slate-400">{user.email}</span>
       </footer>
     </div>
   );

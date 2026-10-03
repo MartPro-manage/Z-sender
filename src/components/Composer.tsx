@@ -17,20 +17,15 @@ import {
   Archive,
   Save,
   CheckCircle2,
-  Zap,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { FileAttachment, fileToAttachment } from '../lib/gmailService';
-import { ContactData, SavedAttachmentData, SenderSettingsData } from '../lib/firestoreService';
+import { ContactData, SavedAttachmentData } from '../lib/firestoreService';
 
 interface ComposerProps {
   user: User;
   contacts: ContactData[];
   savedAttachmentsBank: SavedAttachmentData[];
-  isGmailAuthorized?: boolean;
-  senderSettings?: SenderSettingsData | null;
-  onConnectGmail?: () => Promise<void>;
-  onOpenSenderConfig?: () => void;
   onSendNow: (emailData: {
     toEmail: string;
     subject: string;
@@ -85,10 +80,6 @@ export const Composer: React.FC<ComposerProps> = ({
   user,
   contacts,
   savedAttachmentsBank,
-  isGmailAuthorized,
-  senderSettings,
-  onConnectGmail,
-  onOpenSenderConfig,
   onSendNow,
   onScheduleSend,
   onSaveDraft,
@@ -298,38 +289,10 @@ export const Composer: React.FC<ComposerProps> = ({
             <Send className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Email Transfer & Attachment Composer</h2>
-            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-              <p className="text-xs text-slate-400">
-                Sender: <span className="text-indigo-300 font-mono font-semibold">{user.email}</span>
-              </p>
-              {senderSettings?.appPassword ? (
-                <button
-                  type="button"
-                  onClick={onOpenSenderConfig}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 px-2.5 py-0.5 rounded-full transition cursor-pointer"
-                  title="Direct SMTP sending is active with your App Password"
-                >
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Direct Delivery Active (App Password)</span>
-                </button>
-              ) : isGmailAuthorized ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                  <CheckCircle2 className="w-3 h-3" />
-                  OAuth Active
-                </span>
-              ) : onOpenSenderConfig ? (
-                <button
-                  type="button"
-                  onClick={onOpenSenderConfig}
-                  className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full transition cursor-pointer"
-                  title="Set up your 16-character Gmail App Password to bypass Google OAuth verification limits"
-                >
-                  <Zap className="w-2.5 h-2.5 text-amber-400" />
-                  <span>Configure App Password (Bypass OAuth Limits)</span>
-                </button>
-              ) : null}
-            </div>
+            <h2 className="text-lg font-bold text-white">Gmail Transfer & Attachment Composer</h2>
+            <p className="text-xs text-slate-400">
+              Sender Account: <span className="text-indigo-300 font-mono font-semibold">{user.email}</span>
+            </p>
           </div>
         </div>
 
@@ -656,7 +619,7 @@ export const Composer: React.FC<ComposerProps> = ({
               className="w-full sm:w-auto px-5 py-3 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <Save className="w-4 h-4" />
-              <span>Save as Draft</span>
+              <span>Save as Gmail Draft</span>
             </button>
 
             <button
@@ -672,7 +635,7 @@ export const Composer: React.FC<ComposerProps> = ({
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>{sendMode === 'instant' ? 'Send Email Now' : 'Confirm Scheduled Queue'}</span>
+                  <span>{sendMode === 'instant' ? 'Send Email via Gmail' : 'Confirm Scheduled Queue'}</span>
                 </>
               )}
             </button>

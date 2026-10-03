@@ -3,6 +3,7 @@
   "appId": "1:905871438450:web:3abaad4c679a46fd7008eb",
   "apiKey": "AIzaSyAAX7f-8E22vSUvV8A0bcIkKXx0Urul6Sg",
   "authDomain": "gen-lang-client-0190629153.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-swiftsendmail-d8a0838e-1f0f-4a11-a1f8-e5569821a2ad",
   "storageBucket": "gen-lang-client-0190629153.firebasestorage.app",
   "messagingSenderId": "905871438450",
   "measurementId": "",

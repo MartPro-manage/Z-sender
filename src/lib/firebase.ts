@@ -1,12 +1,14 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-export const db = getFirestore(app, (firebaseConfig as any).firestoreDatabaseId || 'ai-studio-swiftsendmail-d8a0838e-1f0f-4a11-a1f8-e5569821a2ad');
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
 
 export enum OperationType {
   CREATE = 'create',
@@ -58,10 +60,15 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 
 export async function testFirestoreConnection(): Promise<boolean> {
   try {
-    if (!auth.currentUser) return true;
-    await getDoc(doc(db, 'users', auth.currentUser.uid, 'contacts', '_test'));
+    await getDocFromServer(doc(db, 'test', 'connection'));
     return true;
   } catch (error) {
+    if (error instanceof Error && error.message.includes('the client is offline')) {
+      console.error('Firestore client is offline. Please check your configuration.');
+    }
     return false;
   }
 }
+
+// Run connection test on boot
+testFirestoreConnection();

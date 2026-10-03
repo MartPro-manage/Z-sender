@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Send, BookOpen, Clock, History, FolderKanban, LogOut, CheckCircle2, ShieldCheck, Plus, Copy, Check, Trash2 } from 'lucide-react';
+import { Send, BookOpen, Clock, History, FolderKanban, LogOut, CheckCircle2, ShieldCheck, Plus, Copy, Check } from 'lucide-react';
 import { User } from 'firebase/auth';
 
 export type ActiveTab = 'composer' | 'address-book' | 'scheduled-queue' | 'sent-history' | 'attachment-bank';
@@ -9,7 +9,6 @@ interface NavbarProps {
   activeTab: ActiveTab;
   setActiveTab: (tab: ActiveTab) => void;
   onLogout: () => void;
-  onDeleteAccount?: () => void;
   scheduledCount: number;
   contactCount: number;
 }
@@ -19,7 +18,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeTab,
   setActiveTab,
   onLogout,
-  onDeleteAccount,
   scheduledCount,
   contactCount,
 }) => {
@@ -45,7 +43,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <span className="font-extrabold text-lg text-white tracking-tight">SwiftSend</span>
                 <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" />
-                  Account Active
+                  Gmail Connected
                 </span>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-400 font-mono">
@@ -63,24 +61,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 md:hidden">
-            {onDeleteAccount && (
-              <button
-                onClick={onDeleteAccount}
-                className="text-rose-400 hover:text-rose-300 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20"
-                title="Delete Account"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
-            )}
-            <button
-              onClick={onLogout}
-              className="text-slate-400 hover:text-rose-400 p-2 rounded-lg bg-slate-900 border border-slate-800"
-              title="Sign Out"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            onClick={onLogout}
+            className="md:hidden text-slate-400 hover:text-rose-400 p-2 rounded-lg bg-slate-900 border border-slate-800"
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
 
         {/* Navigation Tabs */}
@@ -175,21 +162,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
-          {onDeleteAccount && (
-            <button
-              onClick={onDeleteAccount}
-              className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/20 hover:border-rose-500/40 transition cursor-pointer"
-              title="Permanently Delete Account & All Data"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span>Delete Account</span>
-            </button>
-          )}
-
           <button
             onClick={onLogout}
             className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-rose-400 px-3 py-1.5 rounded-full bg-slate-900 border border-slate-800 hover:border-rose-500/30 transition cursor-pointer"
-            title="Sign Out"
+            title="Sign out of Google Account"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Sign Out</span>
